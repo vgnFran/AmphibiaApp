@@ -4,16 +4,20 @@ const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const sectoresRoutes = require('./routes/sectores');
 const documentosRoutes = require('./routes/documentos');
+const camposRoutes = require('./routes/campos');
+const clasificacionesRoutes = require('./routes/clasificaciones');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/sectores', sectoresRoutes);
 app.use('/api/documentos', documentosRoutes);
+app.use('/api/campos', camposRoutes);
+app.use('/api/clasificaciones', clasificacionesRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 

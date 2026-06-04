@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   FlatList, ActivityIndicator, SafeAreaView, StatusBar, Platform,
+  Image, ScrollView, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { getSectores, getDocumentos, Sector, Documento } from '../services/api';
+import * as ImagePicker from 'expo-image-picker';
+import { getSectores, getDocumentos, getCampos, uploadClasificacion, Sector, Documento, Campo } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const GREEN = '#01a951';
@@ -13,7 +15,7 @@ const TEAL = '#00B4CC';
 const G1 = GREEN;
 const G2 = TEAL;
 
-type Step = 1 | 2;
+type Step = 1 | 2 | 3;
 
 export default function NuevaClasificacionScreen() {
   const navigation = useNavigation();
@@ -34,6 +36,15 @@ export default function NuevaClasificacionScreen() {
   const [searchDoc, setSearchDoc] = useState('');
   const [selectedDoc, setSelectedDoc] = useState<Documento | null>(null);
   const [openDoc, setOpenDoc] = useState(false);
+
+  // Paso 3 — Campos e imagen
+  const [campos, setCampos] = useState<Campo[]>([]);
+  const [loadingCampos, setLoadingCampos] = useState(false);
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [imageFileName, setImageFileName] = useState<string>('');
+  const [uploading, setUploading] = useState(false);
 
   const [error, setError] = useState('');
 
@@ -72,6 +83,47 @@ export default function NuevaClasificacionScreen() {
     setOpenDoc(false);
   }
 
+  async function handlePickImage(source: 'camera' | 'gallery') {
+    const permission = source === 'camera'
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert('Permiso denegado', `Se necesita acceso a ${source === 'camera' ? 'la cámara' : 'la galería'}.`);
+      return;
+    }
+
+    const result = source === 'camera'
+      ? await ImagePicker.launchCameraAsync({ quality: 0.8, allowsEditing: true, base64: true })
+      : await ImagePicker.launchImageLibraryAsync({ quality: 0.8, allowsEditing: true, base64: true });
+
+    if (!result.canceled && result.assets.length > 0) {
+      const asset = result.assets[0];
+      setImageUri(asset.uri);
+      setImageBase64(asset.base64 ?? null);
+      setImageFileName(asset.uri.split('/').pop() || `imagen_${Date.now()}.jpg`);
+    }
+  }
+
+  async function handleContinuarStep2() {
+    if (!selectedDoc || !session) return;
+    setStep(3);
+    setLoadingCampos(true);
+    setError('');
+    try {
+      const data = await getCampos(session.empresa, session.usuario, selectedDoc.nombre);
+      const visibles = data.filter(c => c.estado);
+      setCampos(visibles);
+      const initial: Record<string, string> = {};
+      visibles.forEach(c => { initial[c.orden] = ''; });
+      setFormValues(initial);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoadingCampos(false);
+    }
+  }
+
   const filteredSectores = sectores.filter(s =>
     s.nombre.toLowerCase().includes(searchSector.toLowerCase())
   );
@@ -92,7 +144,7 @@ export default function NuevaClasificacionScreen() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => step === 1 ? navigation.goBack() : setStep(1)}
+            onPress={() => step === 1 ? navigation.goBack() : setStep((step - 1) as Step)}
             style={styles.backBtn}
           >
             <Text style={styles.backText}>‹</Text>
@@ -195,6 +247,72 @@ export default function NuevaClasificacionScreen() {
             )}
           </>
         )}
+
+        {/* ── PASO 3: Campos del formulario ── */}
+        {step === 3 && (
+          <>
+            <Text style={styles.stepTitle}>Completá el formulario</Text>
+            <Text style={styles.stepHint}>
+              Sector: <Text style={{ color: GREEN, fontWeight: '600' }}>{selectedSector?.nombre}</Text>
+            </Text>
+            <Text style={[styles.stepHint, { marginTop: -14 }]}>
+              Documento: <Text style={{ color: GREEN, fontWeight: '600' }}>{selectedDoc?.nombre}</Text>
+            </Text>
+
+            {loadingCampos ? (
+              <View style={{ alignItems: 'center', marginTop: 40 }}>
+                <ActivityIndicator color={GREEN} size="large" />
+                <Text style={[styles.stepHint, { marginTop: 12 }]}>Cargando campos...</Text>
+              </View>
+            ) : error ? (
+              <Text style={{ color: '#ef4444', marginTop: 16 }}>{error}</Text>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {/* ── Imagen ── */}
+                <Text style={styles.fieldLabel}>Imagen</Text>
+                {imageUri ? (
+                  <View style={styles.imagePreviewContainer}>
+                    <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
+                    <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => { setImageUri(null); setImageBase64(null); setImageFileName(''); }}>
+                      <Text style={styles.imageRemoveText}>Quitar imagen</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.imagePickerRow}>
+                    <TouchableOpacity style={styles.imagePickerBtn} onPress={() => handlePickImage('camera')}>
+                      <Text style={styles.imagePickerText}>Cámara</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.imagePickerBtn} onPress={() => handlePickImage('gallery')}>
+                      <Text style={styles.imagePickerText}>Galería</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* ── Campos dinámicos ── */}
+                <View style={{ marginTop: 20 }}>
+                  {campos.map(campo => (
+                    <View key={campo.orden} style={styles.fieldContainer}>
+                      <Text style={styles.fieldLabel}>
+                        {campo.campo}
+                        {campo.requerido && <Text style={{ color: '#ef4444' }}> *</Text>}
+                      </Text>
+                      <TextInput
+                        style={styles.fieldInput}
+                        placeholder={campo.clase === 'Cdatetime' ? 'DD/MM/AAAA' : `Ingresá ${campo.campo.toLowerCase()}`}
+                        placeholderTextColor="#c0c7d0"
+                        maxLength={Number(campo.tam) || undefined}
+                        keyboardType={campo.clase === 'Cdatetime' ? 'numbers-and-punctuation' : 'default'}
+                        value={formValues[campo.orden] || ''}
+                        onChangeText={t => setFormValues(prev => ({ ...prev, [campo.orden]: t }))}
+                      />
+                    </View>
+                  ))}
+                </View>
+                <View style={{ height: 16 }} />
+              </ScrollView>
+            )}
+          </>
+        )}
       </View>
 
       {/* Footer con botón */}
@@ -212,8 +330,53 @@ export default function NuevaClasificacionScreen() {
           <TouchableOpacity
             style={[styles.btn, !selectedDoc && styles.btnOff]}
             disabled={!selectedDoc}
+            onPress={handleContinuarStep2}
           >
             <Text style={[styles.btnText, !selectedDoc && styles.btnTextOff]}>Continuar</Text>
+          </TouchableOpacity>
+        )}
+        {step === 3 && (
+          <TouchableOpacity
+            style={[styles.btn, (loadingCampos || campos.length === 0 || uploading) && styles.btnOff]}
+            disabled={loadingCampos || campos.length === 0 || uploading}
+            onPress={async () => {
+              // Validar campos requeridos
+              const faltantes = campos
+                .filter(c => c.requerido && !formValues[c.orden]?.trim())
+                .map(c => c.campo);
+              if (faltantes.length > 0) {
+                Alert.alert('Campos requeridos', `Completá los siguientes campos:\n• ${faltantes.join('\n• ')}`);
+                return;
+              }
+              if (!imageUri || !imageBase64) {
+                Alert.alert('Imagen requerida', 'Seleccioná una imagen antes de guardar.');
+                return;
+              }
+              if (!session) return;
+
+              setUploading(true);
+              try {
+                const mensaje = await uploadClasificacion(
+                  session.empresa,
+                  session.usuario,
+                  imageBase64,
+                  imageFileName,
+                  formValues
+                );
+                Alert.alert('Éxito', mensaje, [
+                  { text: 'OK', onPress: () => navigation.goBack() }
+                ]);
+              } catch (e: any) {
+                Alert.alert('Error', e.message);
+              } finally {
+                setUploading(false);
+              }
+            }}
+          >
+            {uploading
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <Text style={[styles.btnText, (loadingCampos || campos.length === 0) && styles.btnTextOff]}>Guardar clasificación</Text>
+            }
           </TouchableOpacity>
         )}
       </View>
@@ -364,4 +527,27 @@ const styles = StyleSheet.create({
   btnOff: { backgroundColor: '#f1f5f9', shadowOpacity: 0, elevation: 0 },
   btnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   btnTextOff: { color: '#94a3b8' },
+  fieldContainer: { marginBottom: 16 },
+  fieldLabel: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 },
+  fieldInput: {
+    borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: Platform.OS === 'web' ? 12 : 10,
+    fontSize: 15, color: '#0f172a', backgroundColor: '#fafafa',
+  },
+  imagePickerRow: { flexDirection: 'row', gap: 12 },
+  imagePickerBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 14, borderRadius: 12,
+    borderWidth: 1.5, borderColor: '#e2e8f0',
+    backgroundColor: '#fafafa',
+  },
+  imagePickerText: { fontSize: 14, fontWeight: '600', color: '#374151' },
+  imagePreviewContainer: { marginBottom: 4 },
+  imagePreview: { width: '100%', height: 200, borderRadius: 12 },
+  imageRemoveBtn: {
+    marginTop: 8, alignSelf: 'flex-start',
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 8, backgroundColor: '#fee2e2',
+  },
+  imageRemoveText: { fontSize: 13, color: '#ef4444', fontWeight: '600' },
 });

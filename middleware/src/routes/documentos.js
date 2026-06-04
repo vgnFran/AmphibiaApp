@@ -19,12 +19,12 @@ router.get('/', async (req, res) => {
     }
 
     const documentos = (raw[1] || '')
-      .split('|')
+      .split('*')
       .map(s => s.trim())
       .filter(Boolean)
       .map(item => {
-        const [codigo, nombre] = item.split('*');
-        return { codigo: codigo?.trim(), nombre: nombre?.trim() || codigo?.trim() };
+        const [nombre, codigo] = item.split('|');
+        return { codigo: codigo?.trim(), nombre: nombre?.trim() };
       });
 
     return res.json({ success: true, documentos });
