@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform,
-  StatusBar, ScrollView, Image,
+  StatusBar, ScrollView, Image, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { useAuth } from '../context/AuthContext';
 import { login } from '../services/api';
 
@@ -12,29 +13,101 @@ const G1 = '#01a951';
 const G2 = '#00B4CC';
 
 export default function LoginScreen() {
-  const { signIn } = useAuth();
+  const { signIn, saveBiometricCredentials, getBiometricCredentials,
+          hasBiometricCredentials, setHasBiometricCredentials } = useAuth();
+
   const [empresa, setEmpresa] = useState('');
   const [usuario, setUsuario] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  async function handleLogin() {
-    if (!empresa.trim() || !usuario.trim() || !contrasena.trim()) {
+  const [bioAvailable, setBioAvailable] = useState(false);
+  const [bioType, setBioType] = useState<'faceid' | 'fingerprint' | null>(null);
+
+  // Al montar: detectar biometría disponible y si hay credenciales guardadas
+  useEffect(() => {
+    (async () => {
+      const compatible = await LocalAuthentication.hasHardwareAsync();
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!compatible || !enrolled) return;
+
+      const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+      const hasFace = types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION);
+      setBioType(hasFace ? 'faceid' : 'fingerprint');
+      setBioAvailable(true);
+
+      const creds = await getBiometricCredentials();
+      if (creds) setHasBiometricCredentials(true);
+    })();
+  }, []);
+
+  async function handleLogin(emp?: string, usr?: string, pass?: string) {
+    const e = emp ?? empresa.trim();
+    const u = usr ?? usuario.trim();
+    const p = pass ?? contrasena.trim();
+
+    if (!e || !u || !p) {
       setError('Completá todos los campos');
       return;
     }
     setError('');
     setLoading(true);
     try {
-      const data = await login(empresa.trim(), usuario.trim(), contrasena.trim());
+      const data = await login(e, u, p);
       await signIn({ tokens: data.tokens, empresa: data.empresa, usuario: data.usuario });
+
+      // Si biometría disponible y no hay credenciales guardadas, ofrecer activarla
+      if (bioAvailable && !hasBiometricCredentials) {
+        const label = bioType === 'faceid' ? 'Face ID' : 'huella dactilar';
+        Alert.alert(
+          `Activar ${label}`,
+          `¿Querés usar ${label} para ingresar más rápido la próxima vez?`,
+          [
+            { text: 'Ahora no', style: 'cancel' },
+            {
+              text: 'Activar', onPress: async () => {
+                await saveBiometricCredentials(e, u, p);
+              }
+            },
+          ]
+        );
+      }
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión');
     } finally {
       setLoading(false);
     }
   }
+
+  async function handleBiometricLogin() {
+    const creds = await getBiometricCredentials();
+    if (!creds) {
+      Alert.alert('Sin credenciales', 'No hay credenciales guardadas. Ingresá con usuario y contraseña primero.');
+      return;
+    }
+
+    const label = bioType === 'faceid' ? 'Face ID' : 'tu huella';
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: `Ingresá con ${label}`,
+        cancelLabel: 'Cancelar',
+        disableDeviceFallback: false,
+      });
+
+      if (result.success) {
+        await handleLogin(creds.empresa, creds.usuario, creds.contrasena);
+      } else if (result.error === 'user_cancel') {
+        // usuario canceló, no hacer nada
+      } else {
+        Alert.alert('Error biométrico', result.error || 'No se pudo autenticar');
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    }
+  }
+
+  const bioLabel = bioType === 'faceid' ? 'Face ID' : 'Huella dactilar';
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -56,7 +129,7 @@ export default function LoginScreen() {
           <Text style={styles.tagline}>Gestión inteligente de datos</Text>
         </View>
 
-        {/* Card blanca */}
+        {/* Card */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Iniciar sesión</Text>
           <Text style={styles.cardSub}>Ingresá con tu cuenta de Digitrack</Text>
@@ -67,9 +140,18 @@ export default function LoginScreen() {
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          <TouchableOpacity style={[styles.btn, loading && { opacity: 0.75 }]} onPress={handleLogin} disabled={loading}>
+          <TouchableOpacity style={[styles.btn, loading && { opacity: 0.75 }]} onPress={() => handleLogin()} disabled={loading}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Ingresar</Text>}
           </TouchableOpacity>
+
+          {/* Botón biométrico — solo si hay credenciales guardadas */}
+          {bioAvailable && hasBiometricCredentials && (
+            <TouchableOpacity style={styles.bioBtn} onPress={handleBiometricLogin} disabled={loading}>
+              <Text style={styles.bioBtnText}>
+                {bioType === 'faceid' ? '🔒' : '👆'} Ingresar con {bioLabel}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <Text style={styles.footer}>© {new Date().getFullYear()} Digitrack · Todos los derechos reservados</Text>
@@ -108,22 +190,11 @@ const styles = StyleSheet.create({
   },
   top: { alignItems: 'center', marginBottom: 32 },
   logo: { width: 44, height: 82, marginBottom: 16, tintColor: '#fff' },
-  appName: {
-    fontSize: 30,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: -0.6,
-    marginBottom: 5,
-  },
+  appName: { fontSize: 30, fontWeight: '700', color: '#fff', letterSpacing: -0.6, marginBottom: 5 },
   tagline: { fontSize: 13, color: 'rgba(255,255,255,0.72)', letterSpacing: 0.2 },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 22,
-    padding: 28,
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowRadius: 28,
-    elevation: 12,
+    backgroundColor: '#fff', borderRadius: 22, padding: 28,
+    shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 28, elevation: 12,
   },
   cardTitle: { fontSize: 19, fontWeight: '700', color: '#0f172a', letterSpacing: -0.3, marginBottom: 3 },
   cardSub: { fontSize: 13, color: '#94a3b8', marginBottom: 26 },
@@ -145,5 +216,11 @@ const styles = StyleSheet.create({
     shadowColor: G1, shadowOpacity: 0.28, shadowRadius: 10, elevation: 4,
   },
   btnText: { color: '#fff', fontSize: 15, fontWeight: '600', letterSpacing: 0.2 },
+  bioBtn: {
+    marginTop: 14, paddingVertical: 13, borderRadius: 12,
+    alignItems: 'center', borderWidth: 1.5, borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
+  bioBtnText: { fontSize: 15, fontWeight: '600', color: '#0f172a' },
   footer: { textAlign: 'center', marginTop: 28, fontSize: 11, color: 'rgba(255,255,255,0.5)' },
 });

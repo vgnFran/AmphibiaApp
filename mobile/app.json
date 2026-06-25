@@ -8,7 +8,10 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Usamos Face ID para que puedas ingresar a la app de forma segura y rápida."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +26,8 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-local-authentication"
     ]
   }
 }

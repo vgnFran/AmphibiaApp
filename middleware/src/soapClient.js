@@ -71,6 +71,13 @@ async function getCampos(empresa, usuario, documento) {
   return text;
 }
 
+async function getTipoDoc(empresa, usuario) {
+  const cookie = sessions.get(sessionKey(empresa, usuario));
+  const body = `<getTipoDoc xmlns="${NS}" />`;
+  const { text } = await soapPost('getTipoDoc', body, cookie);
+  return text;
+}
+
 async function setAddDocumentVersion(empresa, usuario, fileBase64, fileName, camposStr) {
   const cookie = sessions.get(sessionKey(empresa, usuario));
   const body = `<setAddDocumentVersion xmlns="${NS}">
@@ -82,4 +89,4 @@ async function setAddDocumentVersion(empresa, usuario, fileBase64, fileName, cam
   return text;
 }
 
-module.exports = { autenticar, getSectores, getDocumentos, getCampos, setAddDocumentVersion };
+module.exports = { autenticar, getSectores, getDocumentos, getCampos, getTipoDoc, setAddDocumentVersion };

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   FlatList, ActivityIndicator, SafeAreaView, StatusBar, Platform,
-  Image, ScrollView, Alert,
+  Image, ScrollView, Alert, Keyboard,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -60,6 +60,7 @@ export default function NuevaClasificacionScreen() {
     setSelectedSector(sector);
     setSearchSector(sector.nombre);
     setOpenSector(false);
+    Keyboard.dismiss();
   }
 
   async function handleContinuarStep1() {
@@ -81,6 +82,7 @@ export default function NuevaClasificacionScreen() {
     setSelectedDoc(doc);
     setSearchDoc(doc.nombre);
     setOpenDoc(false);
+    Keyboard.dismiss();
   }
 
   async function handlePickImage(source: 'camera' | 'gallery') {

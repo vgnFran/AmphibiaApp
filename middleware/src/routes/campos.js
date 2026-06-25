@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getCampos } = require('../soapClient');
+const { getCampos, getTipoDoc } = require('../soapClient');
 
 router.get('/', async (req, res) => {
   const { empresa, usuario, documento } = req.query;
@@ -9,6 +9,9 @@ router.get('/', async (req, res) => {
 
   try {
     const text = await getCampos(empresa, usuario, documento);
+
+    // El webservice requiere que se llame getTipoDoc antes de poder clasificar
+    await getTipoDoc(empresa, usuario);
 
     const matches = text.match(/<string[^>]*>([^<]*)<\/string>/g) || [];
     const raw = matches.map(s => s.replace(/<\/?string[^>]*>/g, ''));
