@@ -82,6 +82,20 @@ export async function getCampos(empresa: string, usuario: string, documento: str
   return data.campos;
 }
 
+export async function ocrImagen(
+  imageBase64: string,
+  campos: { campo: string; orden: string }[]
+): Promise<Record<string, string>> {
+  const response = await fetch(`${MIDDLEWARE_URL}/api/ocr`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageBase64, campos }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Error al procesar la imagen');
+  return data.valores;
+}
+
 export async function uploadClasificacion(
   empresa: string,
   usuario: string,

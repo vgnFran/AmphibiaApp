@@ -70,13 +70,6 @@ async function getDocumentos(empresa, usuario, sector) {
   return text;
 }
 
-async function getTipoDoc(empresa, usuario) {
-  const cookie = sessions.get(sessionKey(empresa, usuario));
-  const body = `<getTipoDoc xmlns="${NS}" />`;
-  const { text } = await soapPost('getTipoDoc', body, cookie);
-  return text;
-}
-
 async function setNormalizar(empresa, usuario, campo) {
   const cookie = sessions.get(sessionKey(empresa, usuario));
   const body = `<setNormalizar xmlns="${NS}">

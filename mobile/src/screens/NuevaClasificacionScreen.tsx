@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  FlatList, ActivityIndicator, SafeAreaView, StatusBar, Platform, Image, ScrollView, Alert, Modal,} from 'react-native';
+  FlatList, ActivityIndicator, SafeAreaView, StatusBar, Platform, Image, ScrollView, Alert, Modal, Keyboard} from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { getSectores, getDocumentos, getTipoDoc, getCampos, getNormalizar, uploadClasificacion, Sector, Documento, TipoDoc, Campo } from '../services/api';
+import { getSectores, getDocumentos, getTipoDoc, getCampos, getNormalizar, uploadClasificacion, ocrImagen, Sector, Documento, TipoDoc, Campo } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const GREEN = '#01a951';
@@ -45,6 +45,7 @@ export default function NuevaClasificacionScreen() {
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imageFileName, setImageFileName] = useState<string>('');
   const [uploading, setUploading] = useState(false);
+  const [analyzingOcr, setAnalyzingOcr] = useState(false);
 
   const [error, setError] = useState('');
 
@@ -61,6 +62,16 @@ export default function NuevaClasificacionScreen() {
     setSearchSector(sector.nombre);
     setOpenSector(false);
     Keyboard.dismiss();
+    // Limpiar selecciones posteriores
+    setSelectedDoc(null);
+    setSearchDoc('');
+    setDocumentos([]);
+    setCampos([]);
+    setFormValues({});
+    setImageUri(null);
+    setImageBase64(null);
+    setImageFileName('');
+    setError('');
   }
 
   async function handleContinuarStep1() {
@@ -81,6 +92,15 @@ export default function NuevaClasificacionScreen() {
   async function handleSelectDoc(doc: Documento) {
     setSelectedDoc(doc);
     setSearchDoc(doc.nombre);
+    setOpenDoc(false);
+    Keyboard.dismiss();
+    // Limpiar campos e imagen del documento anterior
+    setCampos([]);
+    setFormValues({});
+    setImageUri(null);
+    setImageBase64(null);
+    setImageFileName('');
+    setError('');
 
     if (!session) return;
     setStep(3);
@@ -123,6 +143,29 @@ export default function NuevaClasificacionScreen() {
       setImageUri(asset.uri);
       setImageBase64(asset.base64 ?? null);
       setImageFileName(asset.uri.split('/').pop() || `imagen_${Date.now()}.jpg`);
+
+      // OCR automático si hay campos cargados
+      if (asset.base64 && campos.length > 0) {
+        setAnalyzingOcr(true);
+        try {
+          const valores = await ocrImagen(
+            asset.base64,
+            campos.map(c => ({ campo: c.campo, orden: c.orden }))
+          );
+          setFormValues(prev => {
+            const updated = { ...prev };
+            Object.entries(valores).forEach(([orden, valor]) => {
+              if (valor) updated[orden] = valor;
+            });
+            return updated;
+          });
+        } catch (e: any) {
+          // OCR falló silenciosamente, el usuario puede completar a mano
+          console.warn('OCR error:', e.message);
+        } finally {
+          setAnalyzingOcr(false);
+        }
+      }
     }
   }
 
@@ -146,7 +189,27 @@ export default function NuevaClasificacionScreen() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => step === 1 ? navigation.goBack() : setStep((step - 1) as Step)}
+            onPress={() => {
+              if (step === 1) {
+                navigation.goBack();
+              } else if (step === 2) {
+                // Volver a sector: limpiar documento
+                setStep(1);
+                setSelectedDoc(null);
+                setSearchDoc('');
+                setDocumentos([]);
+                setOpenDoc(false);
+              } else if (step === 3) {
+                // Volver a documento: limpiar campos e imagen
+                setStep(2);
+                setCampos([]);
+                setFormValues({});
+                setImageUri(null);
+                setImageBase64(null);
+                setImageFileName('');
+                setError('');
+              }
+            }}
             style={styles.backBtn}
           >
             <Text style={styles.backText}>‹</Text>
@@ -275,9 +338,17 @@ export default function NuevaClasificacionScreen() {
                 {imageUri ? (
                   <View style={styles.imagePreviewContainer}>
                     <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
-                    <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => { setImageUri(null); setImageBase64(null); setImageFileName(''); }}>
-                      <Text style={styles.imageRemoveText}>Quitar imagen</Text>
-                    </TouchableOpacity>
+                    {analyzingOcr && (
+                      <View style={styles.ocrOverlay}>
+                        <ActivityIndicator color="#fff" size="large" />
+                        <Text style={styles.ocrOverlayText}>Analizando imagen...</Text>
+                      </View>
+                    )}
+                    {!analyzingOcr && (
+                      <TouchableOpacity style={styles.imageRemoveBtn} onPress={() => { setImageUri(null); setImageBase64(null); setImageFileName(''); setFormValues(prev => { const r: Record<string,string> = {}; campos.forEach(c => { r[c.orden] = ''; }); return r; }); }}>
+                        <Text style={styles.imageRemoveText}>Quitar imagen</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 ) : (
                   <View style={styles.imagePickerRow}>
@@ -663,7 +734,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa',
   },
   imagePickerText: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  imagePreviewContainer: { marginBottom: 4 },
+  imagePreviewContainer: { marginBottom: 4, position: 'relative' },
+  ocrOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center', gap: 12,
+  },
+  ocrOverlayText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   imagePreview: { width: '100%', height: 200, borderRadius: 12 },
   imageRemoveBtn: {
     marginTop: 8, alignSelf: 'flex-start',
