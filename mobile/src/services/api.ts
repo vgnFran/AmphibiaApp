@@ -37,6 +37,19 @@ export async function getDocumentos(empresa: string, usuario: string, sector: st
   return data.documentos;
 }
 
+export interface TipoDoc {
+  codigo: string;
+  nombre: string;
+}
+
+export async function getTipoDoc(empresa: string, usuario: string): Promise<TipoDoc[]> {
+  const params = new URLSearchParams({ empresa, usuario });
+  const response = await fetch(`${MIDDLEWARE_URL}/api/tipodoc?${params}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Error al obtener tipos de documento');
+  return data.tipoDoc;
+}
+
 export interface Campo {
   campo: string;         // label del campo
   tipo: string;          // varchar, int, datetime...
@@ -51,6 +64,14 @@ export interface Campo {
   orden: string;         // identificador para el upload
   estado: boolean;       // visible en el formulario
   createoptions: string; // estilos Windows opcionales
+}
+
+export async function getNormalizar(empresa: string, usuario: string, campo: string): Promise<string[]> {
+  const params = new URLSearchParams({ empresa, usuario, campo });
+  const response = await fetch(`${MIDDLEWARE_URL}/api/normalizar?${params}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Error al obtener opciones');
+  return data.opciones;
 }
 
 export async function getCampos(empresa: string, usuario: string, documento: string): Promise<Campo[]> {

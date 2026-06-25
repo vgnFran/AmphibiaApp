@@ -9,11 +9,20 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Faltan campos: empresa, usuario, imageBase64, fileName, valores' });
   }
 
+  console.log('[clasificar] fileName:', fileName)
+  console.log('[clasificar] base64 length:', imageBase64?.length)
+  console.log('[clasificar] base64 preview:', imageBase64?.substring(0, 100))
+  console.log('[clasificar] tiene saltos de linea:', imageBase64?.includes('\n'))
+  console.log('[clasificar] valores:', valores)
+
   try {
 
     const camposStr = Object.entries(valores)
+      .filter(([_, valor]) => valor !== '')
       .map(([orden, valor]) => `${orden}=${valor}`)
       .join('|');
+
+    console.log('[clasificar] camposStr:', camposStr);
 
     const text = await setAddDocumentVersion(empresa, usuario, imageBase64, fileName, camposStr);
 
