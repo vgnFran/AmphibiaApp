@@ -6,6 +6,8 @@ const sectoresRoutes = require('./routes/sectores');
 const documentosRoutes = require('./routes/documentos');
 const camposRoutes = require('./routes/campos');
 const clasificacionesRoutes = require('./routes/clasificaciones');
+const tipodocRoutes = require('./routes/tipodoc');
+const normalizarRoutes = require('./routes/normalizar');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,6 +19,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/sectores', sectoresRoutes);
 app.use('/api/documentos', documentosRoutes);
 app.use('/api/campos', camposRoutes);
+app.use('/api/tipodoc', tipodocRoutes);
+app.use('/api/normalizar', normalizarRoutes);
 app.use('/api/clasificaciones', clasificacionesRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

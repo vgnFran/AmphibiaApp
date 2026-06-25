@@ -27,6 +27,7 @@ async function soapPost(action, body, sessionCookie = null) {
   const response = await fetch(SOAP_URL, { method: 'POST', headers, body: xml });
   const text = await response.text();
   const cookie = response.headers.get('set-cookie');
+  console.log(`[SOAP] ${action}:`, text);
   return { text, cookie };
 }
 
@@ -46,7 +47,12 @@ async function autenticar(empresa, usuario, contrasena) {
     throw new Error(tokens[1] || 'Credenciales inválidas');
   }
 
-  if (cookie) sessions.set(sessionKey(empresa, usuario), cookie);
+  if (cookie) {
+    // Extraemos solo el par name=value (sin path, HttpOnly, etc.)
+    const cookieValue = cookie.split(';')[0].trim();
+    sessions.set(sessionKey(empresa, usuario), cookieValue);
+    console.log('[autenticar] cookie guardada:', cookieValue);
+  }
   return { tokens, cookie };
 }
 
@@ -64,6 +70,23 @@ async function getDocumentos(empresa, usuario, sector) {
   return text;
 }
 
+async function getTipoDoc(empresa, usuario) {
+  const cookie = sessions.get(sessionKey(empresa, usuario));
+  const body = `<getTipoDoc xmlns="${NS}" />`;
+  const { text } = await soapPost('getTipoDoc', body, cookie);
+  return text;
+}
+
+async function setNormalizar(empresa, usuario, campo) {
+  const cookie = sessions.get(sessionKey(empresa, usuario));
+  const body = `<setNormalizar xmlns="${NS}">
+      <Campo>${campo}</Campo>
+      <flag>1</flag>
+    </setNormalizar>`;
+  const { text } = await soapPost('setNormalizar', body, cookie);
+  return text;
+}
+
 async function getCampos(empresa, usuario, documento) {
   const cookie = sessions.get(sessionKey(empresa, usuario));
   const body = `<getCampos xmlns="${NS}"><documento>${documento}</documento></getCampos>`;
@@ -73,6 +96,7 @@ async function getCampos(empresa, usuario, documento) {
 
 async function setAddDocumentVersion(empresa, usuario, fileBase64, fileName, camposStr) {
   const cookie = sessions.get(sessionKey(empresa, usuario));
+  console.log('[setAddDocumentVersion] cookie present:', !!cookie, cookie ? cookie.substring(0, 60) : 'NONE');
   const body = `<setAddDocumentVersion xmlns="${NS}">
       <file>${fileBase64}</file>
       <FileName>${fileName}</FileName>
@@ -82,4 +106,4 @@ async function setAddDocumentVersion(empresa, usuario, fileBase64, fileName, cam
   return text;
 }
 
-module.exports = { autenticar, getSectores, getDocumentos, getCampos, setAddDocumentVersion };
+module.exports = { autenticar, getSectores, getDocumentos, getTipoDoc, getCampos, setNormalizar, setAddDocumentVersion };

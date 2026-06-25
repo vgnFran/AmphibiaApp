@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   FlatList, ActivityIndicator, SafeAreaView, StatusBar, Platform,
-  Image, ScrollView, Alert,
+  Image, ScrollView, Alert, Modal,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { getSectores, getDocumentos, getCampos, uploadClasificacion, Sector, Documento, Campo } from '../services/api';
+import { getSectores, getDocumentos, getTipoDoc, getCampos, getNormalizar, uploadClasificacion, Sector, Documento, TipoDoc, Campo } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const GREEN = '#01a951';
@@ -38,6 +39,7 @@ export default function NuevaClasificacionScreen() {
   const [openDoc, setOpenDoc] = useState(false);
 
   // Paso 3 — Campos e imagen
+  const [tipoDoc, setTipoDoc] = useState<TipoDoc[]>([]);
   const [campos, setCampos] = useState<Campo[]>([]);
   const [loadingCampos, setLoadingCampos] = useState(false);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
@@ -77,10 +79,31 @@ export default function NuevaClasificacionScreen() {
     }
   }
 
-  function handleSelectDoc(doc: Documento) {
+  async function handleSelectDoc(doc: Documento) {
     setSelectedDoc(doc);
     setSearchDoc(doc.nombre);
     setOpenDoc(false);
+    if (!session) return;
+
+    setStep(3);
+    setLoadingCampos(true);
+    setError('');
+    try {
+      const [tipoDocData, camposData] = await Promise.all([
+        getTipoDoc(session.empresa, session.usuario),
+        getCampos(session.empresa, session.usuario, doc.nombre),
+      ]);
+      setTipoDoc(tipoDocData);
+      const visibles = camposData.filter(c => c.estado);
+      setCampos(visibles);
+      const initial: Record<string, string> = {};
+      visibles.forEach(c => { initial[c.orden] = ''; });
+      setFormValues(initial);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoadingCampos(false);
+    }
   }
 
   async function handlePickImage(source: 'camera' | 'gallery') {
@@ -102,25 +125,6 @@ export default function NuevaClasificacionScreen() {
       setImageUri(asset.uri);
       setImageBase64(asset.base64 ?? null);
       setImageFileName(asset.uri.split('/').pop() || `imagen_${Date.now()}.jpg`);
-    }
-  }
-
-  async function handleContinuarStep2() {
-    if (!selectedDoc || !session) return;
-    setStep(3);
-    setLoadingCampos(true);
-    setError('');
-    try {
-      const data = await getCampos(session.empresa, session.usuario, selectedDoc.nombre);
-      const visibles = data.filter(c => c.estado);
-      setCampos(visibles);
-      const initial: Record<string, string> = {};
-      visibles.forEach(c => { initial[c.orden] = ''; });
-      setFormValues(initial);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoadingCampos(false);
     }
   }
 
@@ -296,14 +300,12 @@ export default function NuevaClasificacionScreen() {
                         {campo.campo}
                         {campo.requerido && <Text style={{ color: '#ef4444' }}> *</Text>}
                       </Text>
-                      <TextInput
-                        style={styles.fieldInput}
-                        placeholder={campo.clase === 'Cdatetime' ? 'DD/MM/AAAA' : `Ingresá ${campo.campo.toLowerCase()}`}
-                        placeholderTextColor="#c0c7d0"
-                        maxLength={Number(campo.tam) || undefined}
-                        keyboardType={campo.clase === 'Cdatetime' ? 'numbers-and-punctuation' : 'default'}
+                      <CampoInput
+                        campo={campo}
                         value={formValues[campo.orden] || ''}
-                        onChangeText={t => setFormValues(prev => ({ ...prev, [campo.orden]: t }))}
+                        onChange={t => setFormValues(prev => ({ ...prev, [campo.orden]: t }))}
+                        empresa={session?.empresa ?? ''}
+                        usuario={session?.usuario ?? ''}
                       />
                     </View>
                   ))}
@@ -327,13 +329,9 @@ export default function NuevaClasificacionScreen() {
           </TouchableOpacity>
         )}
         {step === 2 && (
-          <TouchableOpacity
-            style={[styles.btn, !selectedDoc && styles.btnOff]}
-            disabled={!selectedDoc}
-            onPress={handleContinuarStep2}
-          >
-            <Text style={[styles.btnText, !selectedDoc && styles.btnTextOff]}>Continuar</Text>
-          </TouchableOpacity>
+          <View style={[styles.btn, styles.btnOff]}>
+            <Text style={[styles.btnText, styles.btnTextOff]}>Seleccioná un documento</Text>
+          </View>
         )}
         {step === 3 && (
           <TouchableOpacity
@@ -382,6 +380,131 @@ export default function NuevaClasificacionScreen() {
       </View>
       </SafeAreaView>
     </View>
+  );
+}
+
+// ── CampoInput ─────────────────────────────────────────────────
+
+function CampoInput({ campo, value, onChange, empresa, usuario }: {
+  campo: Campo;
+  value: string;
+  onChange: (v: string) => void;
+  empresa: string;
+  usuario: string;
+}) {
+  // ── Cdatetime ──
+  if (campo.clase === 'Cdatetime') {
+    const [show, setShow] = useState(false);
+
+    const dateValue = value
+      ? (() => {
+          const [d, m, y] = value.split('/');
+          const parsed = new Date(Number(y), Number(m) - 1, Number(d));
+          return isNaN(parsed.getTime()) ? new Date() : parsed;
+        })()
+      : new Date();
+
+    const handleChange = (_: any, selected?: Date) => {
+      setShow(Platform.OS === 'ios');
+      if (!selected) return;
+      const d = String(selected.getDate()).padStart(2, '0');
+      const m = String(selected.getMonth() + 1).padStart(2, '0');
+      const y = selected.getFullYear();
+      onChange(`${d}/${m}/${y}`);
+    };
+
+    return (
+      <>
+        <TouchableOpacity style={styles.fieldInput} onPress={() => setShow(true)} activeOpacity={0.7}>
+          <Text style={{ fontSize: 15, color: value ? '#0f172a' : '#c0c7d0' }}>
+            {value || 'DD/MM/AAAA'}
+          </Text>
+        </TouchableOpacity>
+        {show && (
+          <DateTimePicker
+            value={dateValue}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={handleChange}
+          />
+        )}
+      </>
+    );
+  }
+
+  // ── Ccombobox ──
+  if (campo.clase === 'Ccombobox') {
+    const [open, setOpen] = useState(false);
+    const [opciones, setOpciones] = useState<string[]>([]);
+    const [loadingOpciones, setLoadingOpciones] = useState(false);
+
+    useEffect(() => {
+      setLoadingOpciones(true);
+      getNormalizar(empresa, usuario, campo.campo)
+        .then(setOpciones)
+        .catch(() => setOpciones([]))
+        .finally(() => setLoadingOpciones(false));
+    }, []);
+
+    return (
+      <>
+        <TouchableOpacity
+          style={[styles.fieldInput, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+          onPress={() => setOpen(true)}
+          activeOpacity={0.7}
+          disabled={loadingOpciones}
+        >
+          {loadingOpciones ? (
+            <ActivityIndicator size="small" color={GREEN} />
+          ) : (
+            <>
+              <Text style={{ fontSize: 15, color: value ? '#0f172a' : '#c0c7d0', flex: 1 }}>
+                {value || `Seleccioná ${campo.campo.toLowerCase()}`}
+              </Text>
+              <Text style={{ color: '#94a3b8', fontSize: 16 }}>▾</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setOpen(false)}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>{campo.campo}</Text>
+              <FlatList
+                data={opciones}
+                keyExtractor={item => item}
+                ItemSeparatorComponent={() => <View style={styles.sep} />}
+                renderItem={({ item }) => {
+                  const active = item === value;
+                  return (
+                    <TouchableOpacity
+                      style={[styles.dropItem, active && styles.dropItemActive]}
+                      onPress={() => { onChange(item); setOpen(false); }}
+                    >
+                      <Text style={[styles.dropItemText, active && styles.dropItemTextActive]}>{item}</Text>
+                      {active && <Text style={styles.checkMark}>✓</Text>}
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      </>
+    );
+  }
+
+  // ── Default: input de texto ──
+  return (
+    <TextInput
+      style={styles.fieldInput}
+      placeholder={`Ingresá ${campo.campo.toLowerCase()}`}
+      placeholderTextColor="#c0c7d0"
+      maxLength={Number(campo.tam) || undefined}
+      keyboardType={campo.tipo === 'int' || campo.tipo === 'decimal' ? 'numeric' : 'default'}
+      value={value}
+      onChangeText={onChange}
+    />
   );
 }
 
@@ -550,4 +673,17 @@ const styles = StyleSheet.create({
     borderRadius: 8, backgroundColor: '#fee2e2',
   },
   imageRemoveText: { fontSize: 13, color: '#ef4444', fontWeight: '600' },
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    paddingTop: 8, paddingBottom: 32, maxHeight: '60%',
+  },
+  modalTitle: {
+    fontSize: 13, fontWeight: '700', color: '#94a3b8', letterSpacing: 0.5,
+    textTransform: 'uppercase', textAlign: 'center',
+    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+  },
 });
