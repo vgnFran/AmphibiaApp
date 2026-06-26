@@ -1,12 +1,17 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "AmphibiaApp",
     "slug": "mobile",
     "version": "1.0.0",
     "newArchEnabled": false,
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#01a951"
+    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {

@@ -144,27 +144,38 @@ export default function NuevaClasificacionScreen() {
       setImageBase64(asset.base64 ?? null);
       setImageFileName(asset.uri.split('/').pop() || `imagen_${Date.now()}.jpg`);
 
-      // OCR automático si hay campos cargados
+      // Preguntar si quiere hacer OCR
       if (asset.base64 && campos.length > 0) {
-        setAnalyzingOcr(true);
-        try {
-          const valores = await ocrImagen(
-            asset.base64,
-            campos.map(c => ({ campo: c.campo, orden: c.orden }))
-          );
-          setFormValues(prev => {
-            const updated = { ...prev };
-            Object.entries(valores).forEach(([orden, valor]) => {
-              if (valor) updated[orden] = valor;
-            });
-            return updated;
-          });
-        } catch (e: any) {
-          // OCR falló silenciosamente, el usuario puede completar a mano
-          console.warn('OCR error:', e.message);
-        } finally {
-          setAnalyzingOcr(false);
-        }
+        Alert.alert(
+          'Autocompletar campos',
+          '¿Querés que la app intente leer los datos del documento y completar los campos automáticamente?',
+          [
+            { text: 'No, completar manualmente', style: 'cancel' },
+            {
+              text: 'Sí, analizar imagen',
+              onPress: async () => {
+                setAnalyzingOcr(true);
+                try {
+                  const valores = await ocrImagen(
+                    asset.base64!,
+                    campos.map(c => ({ campo: c.campo, orden: c.orden }))
+                  );
+                  setFormValues(prev => {
+                    const updated = { ...prev };
+                    Object.entries(valores).forEach(([orden, valor]) => {
+                      if (valor) updated[orden] = valor as string;
+                    });
+                    return updated;
+                  });
+                } catch (e: any) {
+                  Alert.alert('OCR', 'No se pudieron leer los datos. Completá los campos manualmente.');
+                } finally {
+                  setAnalyzingOcr(false);
+                }
+              },
+            },
+          ]
+        );
       }
     }
   }

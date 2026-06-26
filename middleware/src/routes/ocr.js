@@ -26,7 +26,6 @@ async function extraerTextoConTesseract(imageBase64) {
   try {
     const buffer = Buffer.from(imageBase64, 'base64');
 
-    // Preprocesar: escala de grises + contraste + resolución
     await sharp(buffer)
       .grayscale()
       .normalize()
@@ -43,24 +42,24 @@ async function extraerTextoConTesseract(imageBase64) {
 }
 
 async function interpretarConIA(textoOcr, campos) {
-  const camposList = campos.map(c => `- "${c.campo}" (orden: ${c.orden})`).join('\n');
+  const camposList = campos.map(c => `- "${c.campo}"`).join('\n');
 
   const prompt = `Sos un asistente de clasificación documental para una empresa argentina.
-Se extrajo el siguiente texto de un documento mediante OCR:
+  Se extrajo el siguiente texto de un documento mediante OCR:
 
----
-${textoOcr}
----
+  ---
+  ${textoOcr}
+  ---
 
-Tu tarea es identificar qué valor corresponde a cada uno de estos campos del formulario:
-${camposList}
+  Tu tarea es identificar qué valor corresponde a cada uno de estos campos del formulario:
+  ${camposList}
 
-Respondé ÚNICAMENTE con un JSON válido con el formato:
-{ "orden": "valor_extraido", ... }
+  Respondé ÚNICAMENTE con un JSON válido con el formato:
+  { "nombre_del_campo": "valor_extraido", ... }
 
-Donde "orden" es el identificador del campo y "valor_extraido" es el texto que encontraste para ese campo.
-Si no podés determinar el valor de un campo, dejá el string vacío "".
-No agregues explicaciones, solo el JSON.`;
+  Donde "nombre_del_campo" es exactamente el nombre del campo tal como aparece en la lista, y "valor_extraido" es el texto que encontraste en el documento para ese campo.
+  Si no podés determinar el valor de un campo, dejá el string vacío "".
+  No agregues explicaciones, solo el JSON.`;
 
   const response = await client.chat.completions.create({
     model: 'google/gemma-4-31b-it:free',
@@ -69,7 +68,15 @@ No agregues explicaciones, solo el JSON.`;
 
   const text = response.choices[0].message.content.trim();
   const clean = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(clean);
+  const porNombre = JSON.parse(clean);
+
+  // Convertir de { nombre: valor } a { orden: valor }
+  const porOrden = {};
+  campos.forEach(c => {
+    const valor = porNombre[c.campo];
+    if (valor !== undefined) porOrden[c.orden] = valor;
+  });
+  return porOrden;
 }
 
 router.post('/', async (req, res) => {
