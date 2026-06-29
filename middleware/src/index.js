@@ -9,6 +9,7 @@ const clasificacionesRoutes = require('./routes/clasificaciones');
 const tipodocRoutes = require('./routes/tipodoc');
 const normalizarRoutes = require('./routes/normalizar');
 const ocrRoutes = require('./routes/ocr');
+const busquedaRoutes = require('./routes/busqueda');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,6 +25,7 @@ app.use('/api/tipodoc', tipodocRoutes);
 app.use('/api/normalizar', normalizarRoutes);
 app.use('/api/clasificaciones', clasificacionesRoutes);
 app.use('/api/ocr', ocrRoutes);
+app.use('/api/busqueda', busquedaRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 

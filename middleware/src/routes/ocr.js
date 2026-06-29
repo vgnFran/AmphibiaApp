@@ -20,6 +20,7 @@ const tesseractConfig = {
 };
 
 async function extraerTextoConTesseract(imageBase64) {
+
   const tmpInput = path.join(os.tmpdir(), `ocr_in_${Date.now()}.png`);
   const tmpOutput = path.join(os.tmpdir(), `ocr_out_${Date.now()}.png`);
 

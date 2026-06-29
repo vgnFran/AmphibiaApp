@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 
 const G1 = '#01a951';
 const G2 = '#00B4CC';
+const TEAL = G2;
 
 export default function HomeScreen() {
   const { session, signOut } = useAuth();
@@ -64,9 +65,24 @@ export default function HomeScreen() {
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={[styles.actionCard, { marginTop: 10, borderLeftColor: TEAL }]}
+            activeOpacity={0.75}
+            onPress={() => navigation.navigate('BusquedaDocumental')}
+          >
+            <View style={[styles.actionIcon, { backgroundColor: '#f0fbff' }]}>
+              <View style={[styles.actionIconDot, { backgroundColor: TEAL }]} />
+            </View>
+            <View style={styles.actionBody}>
+              <Text style={styles.actionTitle}>Consultar documentos</Text>
+              <Text style={styles.actionDesc}>Buscá documentos por sus campos</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+
           <Text style={[styles.sectionLabel, { marginTop: 32 }]}>PRÓXIMAMENTE</Text>
 
-          {['Consultar documentos', 'Historial de envíos', 'Mis legajos'].map(name => (
+          {['Historial de envíos', 'Mis legajos'].map(name => (
             <View key={name} style={styles.disabledCard}>
               <Text style={styles.disabledTitle}>{name}</Text>
               <View style={styles.badge}><Text style={styles.badgeText}>Pronto</Text></View>

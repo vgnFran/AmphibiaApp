@@ -176,6 +176,31 @@ export async function ocrImagen(
   }
 }
 
+export interface ResultadoBusqueda {
+  nombreDocumento?: string;
+  campos: { nombre: string; valor: string }[];
+}
+
+export async function buscarDocumentos(
+  empresa: string,
+  usuario: string,
+  documento: string,
+  valores: Record<string, string>
+): Promise<ResultadoBusqueda[]> {
+  try {
+    const response = await fetchWithRetry(`${MIDDLEWARE_URL}/api/busqueda`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empresa, usuario, documento, valores }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error);
+    return data.resultados;
+  } catch (err) {
+    throw friendlyError(err, 'realizar la búsqueda');
+  }
+}
+
 export async function uploadClasificacion(
   empresa: string,
   usuario: string,

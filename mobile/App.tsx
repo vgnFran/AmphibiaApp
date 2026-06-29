@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import LoginScreen from './src/screens/LoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import NuevaClasificacionScreen from './src/screens/NuevaClasificacionScreen';
+import BusquedaDocumentalScreen from './src/screens/BusquedaDocumentalScreen';
 import SplashCustom from './src/screens/SplashCustom';
 
 SplashScreen.preventAutoHideAsync();
@@ -20,6 +21,7 @@ function RootNavigator() {
         <>
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="NuevaClasificacion" component={NuevaClasificacionScreen} />
+          <Stack.Screen name="BusquedaDocumental" component={BusquedaDocumentalScreen} />
         </>
       ) : (
         <Stack.Screen name="Login" component={LoginScreen} />

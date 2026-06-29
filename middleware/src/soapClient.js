@@ -27,7 +27,6 @@ async function soapPost(action, body, sessionCookie = null) {
   const response = await fetch(SOAP_URL, { method: 'POST', headers, body: xml });
   const text = await response.text();
   const cookie = response.headers.get('set-cookie');
-  console.log(`[SOAP] ${action}:`, text);
   return { text, cookie };
 }
 
@@ -48,10 +47,8 @@ async function autenticar(empresa, usuario, contrasena) {
   }
 
   if (cookie) {
-    // Extraemos solo el par name=value (sin path, HttpOnly, etc.)
     const cookieValue = cookie.split(';')[0].trim();
     sessions.set(sessionKey(empresa, usuario), cookieValue);
-    console.log('[autenticar] cookie guardada:', cookieValue);
   }
   return { tokens, cookie };
 }
@@ -94,9 +91,18 @@ async function getTipoDoc(empresa, usuario) {
   return text;
 }
 
+async function getDocumentoConsulta(empresa, usuario, documento, camposStr) {
+  const cookie = sessions.get(sessionKey(empresa, usuario));
+  const body = `<getDocumentoConsulta xmlns="${NS}">
+      <documento>${documento}</documento>
+      <campos>${camposStr}</campos>
+    </getDocumentoConsulta>`;
+  const { text } = await soapPost('getDocumentoConsulta', body, cookie);
+  return text;
+}
+
 async function setAddDocumentVersion(empresa, usuario, fileBase64, fileName, camposStr) {
   const cookie = sessions.get(sessionKey(empresa, usuario));
-  console.log('[setAddDocumentVersion] cookie present:', !!cookie, cookie ? cookie.substring(0, 60) : 'NONE');
   const body = `<setAddDocumentVersion xmlns="${NS}">
       <file>${fileBase64}</file>
       <FileName>${fileName}</FileName>
@@ -106,5 +112,5 @@ async function setAddDocumentVersion(empresa, usuario, fileBase64, fileName, cam
   return text;
 }
 
-module.exports = { autenticar, getSectores, getDocumentos, getTipoDoc, getCampos, setNormalizar, setAddDocumentVersion };
+module.exports = { autenticar, getSectores, getDocumentos, getTipoDoc, getCampos, setNormalizar, setAddDocumentVersion, getDocumentoConsulta };
 
